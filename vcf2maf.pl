@@ -529,8 +529,10 @@ if ($retain_ann) {
 my @ann_cols_format; # To store the actual order of VEP data, that may differ between runs
 push( @maf_header, @ann_cols );
 
-# Add original VCF POS column header
+# Add original VCF POS, REF, ALT columns header
 push( @maf_header, "vcf_pos" );
+push( @maf_header, "vcf_ref" );
+push( @maf_header, "vcf_alt" );
 
 # If the user has INFO fields they want to retain, create additional columns for those
 my @addl_info_cols = ();
@@ -682,7 +684,7 @@ while( my $line = $annotated_vcf_fh->getline ) {
     my $start = my $stop = my $var_type = my $inframe = "";
     my ( $ref_length, $var_length ) = ( length( $ref ), length( $var ));
     # Backup the VCF-style position and REF/ALT alleles, so we can use it later
-    my ( $vcf_pos, $vcf_ref, $vcf_var ) = ( $pos, $ref, $var );
+    my ( $vcf_pos, $vcf_ref, $vcf_alt ) = ( $pos, $ref, $alt );
     # Remove any prefixed reference bps from all alleles, using "-" for simple indels
     while( $ref and $var and substr( $ref, 0, 1 ) eq substr( $var, 0, 1 ) and $ref ne $var ) {
         ( $ref, $var, @alleles ) = map{$_ = substr( $_, 1 ); ( $_ ? $_ : "-" )} ( $ref, $var, @alleles );
@@ -910,8 +912,10 @@ while( my $line = $annotated_vcf_fh->getline ) {
     $maf_line{vcf_id} = $var_id;
     $maf_line{vcf_qual} = $var_qual;
 
-    # Add original VCF POS column
+    # Add original VCF POS, REF, ALT columns
     $maf_line{vcf_pos} = $vcf_pos;
+    $maf_line{vcf_ref} = $vcf_ref;
+    $maf_line{vcf_alt} = $vcf_alt;
 
     # If there are additional INFO data to add, then add those
     foreach my $info_col ( @addl_info_cols ) {
