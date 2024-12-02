@@ -1,0 +1,39 @@
+package:
+  name: vcf2maf
+  version: 1.6.22.eblab
+
+source:
+  sha256: 9f1736f0d9ecfcb37a85b712dafb24f14be8f7d72317d53b8be835fd40e3a309
+  url: https://github.com/ElsaB-Lab/DNA_Seq_vcf2maf/releases/tag/v1.6.22.eblab
+
+build:
+  noarch: generic
+  number: 0
+  script: bash ./build.sh  # Use a build script to install dependencies
+
+requirements:
+  build: []
+  run:
+    - htslib
+    - perl
+    - samtools
+
+test:
+  commands:
+    - vcf2maf.pl --help
+
+about:
+  dev_url: https://github.com/ElsaB-Lab/DNA_Seq_vcf2maf
+  home: https://github.com/ElsaB-Lab/DNA_Seq_vcf2maf
+  license: Apache-2.0
+  license_family: APACHE
+  summary: Convert a VCF into a MAF where each variant is annotated to only one of
+    all possible gene isoforms.
+
+extra:
+  recipe-maintainers:
+    - ypradat
+  copy_test_source_files: true
+  final: true
+  notes: 'This package installs only vcf2maf and does not integrate with the variant-effect-predictor
+    (VEP). To do so, please follow the instructions at https://github.com/mskcc/vcf2maf/blob/master/README.md.'
