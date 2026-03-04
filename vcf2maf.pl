@@ -14,7 +14,7 @@ use Text::Wrap;
 
 # Set any default paths and constants
 my ( $tumor_id, $normal_id ) = ( "TUMOR", "NORMAL" );
-my ( $vep_path, $vep_data, $vep_forks, $buffer_size, $any_allele, $inhibit_vep, $online, $vep_custom, $vep_config, $vep_overwrite, $vep_stats  ) = ( "$ENV{HOME}/miniconda3/bin", "$ENV{HOME}/.vep", 4, 5000, 0, 0, 0, "", "", 0 , 0);
+my ( $vep_path, $vep_data, $vep_forks, $buffer_size, $any_allele, $inhibit_vep, $online, $vep_custom, $vep_config, $vep_plugins, $vep_overwrite, $vep_stats  ) = ( "$ENV{HOME}/miniconda3/bin", "$ENV{HOME}/.vep", 4, 5000, 0, 0, 0, "", "", "", 0 , 0);
 my ( $ref_fasta ) = ( "$ENV{HOME}/.vep/homo_sapiens/112_GRCh37/Homo_sapiens.GRCh37.dna.toplevel.fa.gz" );
 my ( $species, $ncbi_build, $cache_version, $maf_center, $retain_info, $retain_fmt, $retain_ann, $min_hom_vaf, $max_subpop_af ) = ( "homo_sapiens", "GRCh37", "", ".", "", "", "", 0.7, 0.0004 );
 my $perl_bin = $Config{perlpath};
@@ -35,11 +35,21 @@ sub GetEffectPriority {
     my %effectPriority = (
         'transcript_ablation' => 1, # A feature ablation whereby the deleted region includes a transcript feature
         'exon_loss_variant' => 1, # A sequence variant whereby an exon is lost from the transcript
+        'sequence_feature + exon_loss_variant' =>1, # A 'NextProt' based annotation. Details are provided in the 'feature type' sub-field (ANN), or in the effect details (EFF).
+        'feature_ablation' =>1, # Deletion of a gene.
+        'chromosome_number_variation' =>1, # A kind of chromosome variation where the chromosome complement is not an exact multiple of the haploid number.
+        'bidirectional_gene_fusion' =>2, # Fusion of two genes in opposite directions.
+        'duplication' =>2, # Duplication affecting part of an exon.
+        'gene_fusion' =>2, # Fusion of two genes.
+        'inversion' =>2, # Inversion of an exon.
         'splice_donor_variant' => 2, # A splice variant that changes the 2 base region at the 5' end of an intron
         'splice_acceptor_variant' => 2, # A splice variant that changes the 2 base region at the 3' end of an intron
         'stop_gained' => 3, # A sequence variant whereby at least one base of a codon is changed, resulting in a premature stop codon, leading to a shortened transcript
         'frameshift_variant' => 3, # A sequence variant which causes a disruption of the translational reading frame, because the number of nucleotides inserted or deleted is not a multiple of three
         'stop_lost' => 3, # A sequence variant where at least one base of the terminator codon (stop) is changed, resulting in an elongated transcript
+        'inversion' =>3, # Inversion of a large chromosome segment (over 1% or 1,000,000 bases).
+        'initiator_codon_variant+non_canonical_start_codon' =>4, # 
+        'rearranged_at_DNA_level' =>4, # Rearrangement affecting one or more genes.
         'start_lost' => 4, # A codon variant that changes at least one base of the canonical start codon
         'initiator_codon_variant' => 4, # A codon variant that changes at least one base of the first codon of a transcript
         'disruptive_inframe_insertion' => 5, # An inframe increase in cds length that inserts one or more codons into the coding sequence within an existing codon
@@ -53,6 +63,12 @@ sub GetEffectPriority {
         'conservative_missense_variant' => 6, # A sequence variant whereby at least one base of a codon is changed resulting in a codon that encodes for a different but similar amino acid. These variants may or may not be deleterious
         'rare_amino_acid_variant' => 6, # A sequence variant whereby at least one base of a codon encoding a rare amino acid is changed, resulting in a different encoded amino acid
         'transcript_amplification' => 7, # A feature amplification of a region containing a transcript
+        '5_prime_UTR_truncation + exon_loss_variant' =>7, # The variant deletes an exon which is in the 5'UTR of the transcript
+        'protein_altering_variant' =>7, # A sequence_variant which is predicted to change the protein encoded in the coding sequence.
+        'protein_protein_contact' =>8, # Protein-Protein interaction loci.
+        '3_prime_UTR_truncation + exon_loss' =>8, # The variant deletes an exon which is in the 3'UTR of the transcript
+        'structural_interaction_variant' =>8, # Within protein interaction loci (e.g. two AA that are in contact within the same protein, possibly helping structural conformation).
+        'splice_branch_variant' =>8, #
         'splice_region_variant' => 8, # A sequence variant in which a change has occurred within the region of the splice site, either within 1-3 bases of the exon or 3-8 bases of the intron
         'splice_donor_5th_base_variant' => 8, # A sequence variant that causes a change at the 5th base pair after the start of the intron in the orientation of the transcript
         'splice_donor_region_variant' => 8, # A sequence variant that falls in the region between the 3rd and 6th base after splice junction (5' end of intron)
@@ -60,10 +76,12 @@ sub GetEffectPriority {
         'start_retained_variant' => 9, # A sequence variant where at least one base in the start codon is changed, but the start remains
         'stop_retained_variant' => 9, # A sequence variant where at least one base in the terminator codon is changed, but the terminator remains
         'synonymous_variant' => 9, # A sequence variant where there is no resulting change to the encoded amino acid
+        'start_retained' =>9, # Variant causes start codon to be mutated into another start codon. e.g.: Ttg/Ctg, L/L (TTG and CTG can be START codons)
         'incomplete_terminal_codon_variant' => 10, # A sequence variant where at least one base of the final codon of an incompletely annotated transcript is changed
         'coding_sequence_variant' => 11, # A sequence variant that changes the coding sequence
         'mature_miRNA_variant' => 11, # A transcript variant located with the sequence of the mature miRNA
         'exon_variant' => 11, # A sequence variant that changes exon sequence
+        'transcript_variant' =>11, # The variant hits a transcript.
         '5_prime_UTR_variant' => 12, # A UTR variant of the 5' UTR
         '5_prime_UTR_premature_start_codon_gain_variant' => 12, # snpEff-specific effect, creating a start codon in 5' UTR
         '3_prime_UTR_variant' => 12, # A UTR variant of the 3' UTR
@@ -75,6 +93,7 @@ sub GetEffectPriority {
         'intragenic_variant' => 14, # A variant that occurs within a gene but falls outside of all transcript features. This occurs when alternate transcripts of a gene do not share overlapping sequence
         'INTRAGENIC' => 14, # snpEff-specific synonym of intragenic_variant
         'NMD_transcript_variant' => 15, # A variant in a transcript that is the target of NMD
+        'coding_transcript_variant' =>15, # A transcript variant of a protein coding gene.
         'upstream_gene_variant' => 16, # A sequence variant located 5' of a gene
         'downstream_gene_variant' => 16, # A sequence variant located 3' of a gene
         'TFBS_ablation' => 17, # A feature ablation whereby the deleted region includes a transcription factor binding site
@@ -84,11 +103,18 @@ sub GetEffectPriority {
         'regulatory_region_amplification' => 17, # A feature amplification of a region containing a regulatory region
         'regulatory_region_variant' => 17, # A sequence variant located within a regulatory region
         'regulatory_region' =>17, # snpEff-specific effect that should really be regulatory_region_variant
+        'mature_miRNA_variant' =>17, # 
+        'miRNA' =>17, # Variant affects an miRNA
         'feature_elongation' => 18, # A sequence variant that causes the extension of a genomic feature, with regard to the reference sequence
         'feature_truncation' => 18, # A sequence variant that causes the reduction of a genomic feature, with regard to the reference sequence
         'intergenic_variant' => 19, # A sequence variant located in the intergenic region, between genes
         'intergenic_region' => 19, # snpEff-specific effect that should really be intergenic_variant
-        '' => 20
+        'sequence_feature' =>19, # Any extent of continuous biological sequence.
+        'conserved_intron_variant' =>19, # The variant is in a highly conserved intronic region
+        'conserved_intergenic_variant' =>20, # The variant is in a highly conserved intergenic region 
+        'gene_variant' =>19, # The variant hits a gene.
+        'custom' =>20,
+        '' => 20,
     );
     unless( defined $effectPriority{$effect} ) {
         warn "WARNING: Unrecognized effect \"$effect\". Assigning lowest priority!\n";
@@ -129,6 +155,7 @@ sub GetBiotypePriority {
         'bidirectional_promoter_lncRNA' => 3, # A non-coding locus that originates from within the promoter region of a protein-coding gene, with transcription proceeding in the opposite direction on the other strand
         'known_ncrna' => 4,
         'vaultRNA' => 4, # Short non coding RNA genes that form part of the vault ribonucleoprotein complex
+        'vault_RNA' => 4,
         'macro_lncRNA' => 4, # unspliced lncRNAs that are several kb in size
         'Mt_tRNA' => 4, # Non-coding RNA predicted using sequences from RFAM and miRBase
         'Mt_rRNA' => 4, # Non-coding RNA predicted using sequences from RFAM and miRBase
@@ -158,6 +185,7 @@ sub GetBiotypePriority {
         'pseudogene' => 8, # Have homology to proteins but generally suffer from a disrupted coding sequence and an active homologous gene can be found at another locus. Sometimes these entries have an intact coding sequence or an open but truncated ORF, in which case there is other evidence used (for example genomic polyA stretches at the 3' end) to classify them as a pseudogene. Can be further classified as one of the following
         'processed_pseudogene' => 8, # Pseudogene that lack introns and is thought to arise from reverse transcription of mRNA followed by reinsertion of DNA into the genome
         'polymorphic_pseudogene' => 8, # Pseudogene owing to a SNP/DIP but in other individuals/haplotypes/strains the gene is translated
+        'protein_coding_LoF' => 8, # Not translated in the reference genome owing to a SNP/DIP but in other individuals/haplotypes/strains the transcript is translated. Replaces the polymorphic_pseudogene transcript biotype
         'retrotransposed' => 8, # Pseudogene owing to a reverse transcribed and re-inserted sequence
         'translated_processed_pseudogene' => 8, # Pseudogenes that have mass spec data suggesting that they are also translated
         'translated_unprocessed_pseudogene' => 8, # Pseudogenes that have mass spec data suggesting that they are also translated
@@ -174,6 +202,7 @@ sub GetBiotypePriority {
         'rRNA_pseudogene' => 8, # Non-coding RNAs predicted to be pseudogenes by the Ensembl pipeline
         'misc_RNA_pseudogene' => 8, # Non-coding RNAs predicted to be pseudogenes by the Ensembl pipeline
         'miRNA_pseudogene' => 8, # Non-coding RNAs predicted to be pseudogenes by the Ensembl pipeline
+        'IG_pseudogene' => 8, # Inactivated immunoglobulin gene
         'IG_C_pseudogene' => 8, # Inactivated immunoglobulin gene
         'IG_D_pseudogene' => 8, # Inactivated immunoglobulin gene
         'IG_J_pseudogene' => 8, # Inactivated immunoglobulin gene
@@ -217,6 +246,7 @@ GetOptions(
     'vep-forks=s' => \$vep_forks,
     'vep-custom=s' => \$vep_custom,
     'vep-config=s' => \$vep_config,
+    'vep-plugins=s' => \$vep_plugins,
     'vep-overwrite!' => \$vep_overwrite,
     'vep-stats' => \$vep_stats,
     'buffer-size=i' => \$buffer_size,
@@ -332,10 +362,18 @@ while( my $line = $orig_vcf_fh->getline ) {
             $cols[7]=~s/CT=([35]to[35])/Frame=$1/;
             $cols[7]=~s/SVMETHOD=([\w.]+)/Method=$1/;
             $cols[4] = "<" . $info{SVTYPE} . ">";
+            # if no separate chromosome for the breakpoint end is specified, use the same as for
+            # the breakpoint start (the VCF specification does not mention an INFO/CHR2 field)
+            my $chr2;
+            if (exists $info{CHR2}) {
+                $chr2 = $info{CHR2};
+            } else {
+                $chr2 = $cols[0];
+            }
             # Fetch the REF allele at the second breakpoint using samtools faidx
-            my $ref2 = `'$samtools' faidx '$ref_fasta' $info{CHR2}:$info{END}-$info{END} | grep -v ^\\>`;
+            my $ref2 = `'$samtools' faidx '$ref_fasta' $chr2:$info{END}-$info{END} | grep -v ^\\>`;
             chomp( $ref2 );
-            $split_vcf_fh->print( join( "\t", $info{CHR2}, $info{END}, $cols[2], ( $ref2 ? $ref2 : $cols[3] ), @cols[4..$#cols] ), "\n" );
+            $split_vcf_fh->print( join( "\t", $chr2, $info{END}, $cols[2], ( $ref2 ? $ref2 : $cols[3] ), @cols[4..$#cols] ), "\n" );
             $split_vcf_fh->print( join( "\t", @cols ), "\n" );
         }
         $input_vcf = "$tmp_dir/$input_name.split.vcf";
@@ -478,6 +516,8 @@ unless( $inhibit_vep ) {
     $vep_cmd .= " --custom $vep_custom" if ($vep_custom);
     # Add --config if requested at command line
     $vep_cmd .= " --config $vep_config" if ($vep_config);
+    # Add --plugin if requested at command line
+    $vep_cmd .= " --plugin $vep_plugins" if ($vep_plugins);
     # Require allele match for co-located variants unless user-rejected or we're using a newer VEP
     $vep_cmd .= " --check_allele" unless( $any_allele or $vep_script =~ m/vep$/ );
     # Add --cache-version only if the user specifically asked for a version
@@ -524,8 +564,15 @@ my @ann_cols = qw( Allele Gene Feature Feature_type Consequence cDNA_position CD
 
 # push any requested custom VEP annotations from the CSQ/ANN section into @ann_cols
 if ($retain_ann) {
-    push @ann_cols, split(',',$retain_ann);
+    my @extra_ann = split(',',$retain_ann);
+    for my $ann (@extra_ann) {
+        # make sure not to add duplicates to @ann_cols
+        if ( !($ann ~~ @ann_cols) ) {
+            push @ann_cols, $ann;
+        }
+    }
 }
+
 my @ann_cols_format; # To store the actual order of VEP data, that may differ between runs
 push( @maf_header, @ann_cols );
 
@@ -1283,6 +1330,10 @@ String to pass into VEP's --custom option [] (see L<CUSTOMIZED VEP ANNOTATION> b
 
 VEP config file to pass into vep's --config option [] (see L<CUSTOMIZED VEP ANNOTATION> below)
 
+=item B<--vep-plugins>=I<VEP_PLUGIN_STRING>
+
+A string of plugin instructions to pass into vep's --plugin option [] (see L<VEP PLUGINS> below)
+
 =back
 
 =head3 CUSTOMIZED VEP ANNOTATION
@@ -1295,7 +1346,7 @@ L<https://useast.ensembl.org/info/docs/tools/vep/script/vep_custom.html>
 
 The custom VEP output is saved in the B<INFO> section of the VCF line, as part of the B<CSQ=> section.
 
-To retain the customized output in the MAF file, in addition to specifing the custom annoation
+To retain the customized output in the MAF file, in addition to specifing the custom annotation
 and fields with B<--vep-custom> , we need to specify the fields to retain with B<--retain-ann>.
 
 VEP's B<--custom>=I<STRING> is a comma-separated string:
@@ -1317,6 +1368,40 @@ For example, below we have Short_name of I<MY_Ann> and VCF_fields of I<AD,TOPMED
 --retain-ann I<MY_Ann>B<_>I<AD>,I<MY_Ann>B<_>I<TOPMED>
 
 =back
+
+=back
+
+=head3 VEP PLUGINS
+
+=over 2
+
+**NOTE**: This currently has only been tested with the AlphaMissense plugin. 
+Other plugins, particularly custom plugins, may not be compatible.
+
+VEP's plugins are described at: 
+
+L<https://useast.ensembl.org/info/docs/tools/vep/script/vep_plugins.html>
+
+To use a VEP plugin, we need to specify the plugin name and options with B<--vep-plugins>.
+
+For example, to use the VEP AlphaMissense plugin:
+
+L<https://github.com/Ensembl/VEP_plugins/blob/main/AlphaMissense.pm>
+
+After retrieving and tabix indexing the AlphaMissense database as described in the plugin README, 
+we can include these parameters and values in the vcf2maf command. Please note, you'll need to 
+specify the names of the annotations from the plugin that you would like to retain 
+with B<--retain-ann> to ensure they are included in the output MAF. 
+
+=over 8
+
+--vep-plugins AlphaMissense,file=/path/to/AlphaMissense_{build}.tsv.gz 
+
+--retain-ann am_pathogenicity,am_class
+
+=back
+
+The output maf should now have the annotations am_pathogenicity and am_class included as columns.
 
 =back
 
@@ -1402,6 +1487,10 @@ L<https://ensembl.org/info/docs/tools/vep/vep_formats.html#vcfout>
 =item VEP customized output:
 
 L<https://useast.ensembl.org/info/docs/tools/vep/script/vep_custom.html>
+
+=item VEP plugins:
+
+L<https://useast.ensembl.org/info/docs/tools/vep/script/vep_plugins.html>
 
 =back
 
