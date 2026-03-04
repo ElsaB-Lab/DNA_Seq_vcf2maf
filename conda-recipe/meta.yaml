@@ -1,15 +1,14 @@
 package:
   name: vcf2maf
-  version: 1.6.22.eblab
+  version: 1.7.0.elsablab
 
 source:
-  sha256: 9f1736f0d9ecfcb37a85b712dafb24f14be8f7d72317d53b8be835fd40e3a309
-  url: https://github.com/ElsaB-Lab/DNA_Seq_vcf2maf/releases/tag/v1.6.22.eblab
+  sha256: f84d1ecd1a048bdec7bb6b232d6bde8642f9626d2c6e5932429b9957bbb58e69
+  url: https://github.com/ElsaB-Lab/DNA_Seq_vcf2maf/archive/refs/tags/v1.7.0.elsablab.tar.gz
 
 build:
   noarch: generic
   number: 0
-  script: bash ./build.sh  # Use a build script to install dependencies
 
 requirements:
   build: []
